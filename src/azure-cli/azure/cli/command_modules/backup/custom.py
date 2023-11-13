@@ -169,7 +169,7 @@ def create_vault(client, vault_name, resource_group_name, location, tags=None,
                        "to their default values. It is recommended to use az backup vault update instead.")
 
         # If the vault exists, we move to the update flow instead
-        update_vault(client, vault_name, resource_group_name, tags, public_network_access,
+        return update_vault(client, vault_name, resource_group_name, tags, public_network_access,
                      immutability_state, cross_subscription_restore_state, classic_alerts,
                      azure_monitor_alerts_for_job_failures)
     except CoreResourceNotFoundError:
