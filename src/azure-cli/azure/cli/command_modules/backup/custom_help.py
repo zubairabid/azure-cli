@@ -50,6 +50,8 @@ operation_name_map = {"deleteProtection": rsc_type + "/backupFabrics/protectionC
                       "RecoveryServicesDisableImmutability": rsc_type + "/write#reduceImmutabilityState",
                       "RecoveryServicesStopProtection": rsc_type +
                       "/backupFabrics/protectionContainers/protectedItems/write#stopProtectionWithRetainData",
+                      "RecoveryServicesBackupsSuspended": rsc_type +
+                      "/backupFabrics/protectionContainers/protectedItems/write#suspendBackupsWithRetainData",
                       "RecoveryServicesRestore": rsc_type +
                       "/backupFabrics/protectionContainers/protectedItems/recoveryPoints/restore/action",
                       "RecoveryServicesModifyEncryptionSettings": rsc_type +
