@@ -381,7 +381,7 @@ def disable_protection(cmd, client, resource_group_name, vault_name, item,
 
     # ResourceGuard scenario: if we are stopping backup and there is MUA setup for the scenario,
     # we want to set the appropriate parameters.
-    if afs_item.properties.protection_state == ProtectionState.protection_stopped:
+    if afs_item.properties.protection_state in [ProtectionState.protection_stopped, ProtectionState.backups_suspended]:
         if helper.has_resource_guard_mapping(cmd.cli_ctx, resource_group_name,
                                              vault_name, "RecoveryServicesStopProtection"):
             # Cross Tenant scenario
