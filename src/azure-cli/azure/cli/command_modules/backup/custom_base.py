@@ -587,6 +587,10 @@ def undelete_protection(cmd, client, resource_group_name, vault_name, container_
     if item.properties.backup_management_type.lower() == "azureworkload":
         return custom_wl.undelete_protection(cmd, client, resource_group_name, vault_name, item)
 
+    if item.properties.backup_management_type.lower() == "azurestorage":
+        import azure.cli.command_modules.backup.custom_afs as custom_afs
+        return custom_afs.undelete_protection(cmd, client, resource_group_name, vault_name, item)
+
     return None
 
 
