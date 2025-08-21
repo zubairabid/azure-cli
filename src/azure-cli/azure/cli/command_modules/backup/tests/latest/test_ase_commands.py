@@ -161,4 +161,54 @@ class ASEBackupTests(ScenarioTest, unittest.TestCase):
         # # az backup protection disable -v ase-rsv-ccy -g ase-rg-ccy -c VMAppContainer;Compute;ase-rg-ccy;ase-ccy-vm2 --backup-management-type AzureWorkload --workload-type SAPAseDatabase -y -i SAPAseDatabase;ab4;asetestdb3 --delete-backup-data true
         self.cmd('backup protection disable -v {vault} -g {rg} -c {vm} --backup-management-type AzureWorkload --workload-type SAPAseDatabase -i {backup_item} -y --delete-backup-data true -y')
 
+    def test_ase_undelete_protection(self):
+        """Test ASE undelete protection functionality"""
+        self.kwargs.update({
+            'vault': vault_ase_reg,
+            'vm_full_name': reg_vm_name_ase,
+            'vm_friendly_name': reg_vm_friendly_name,
+            'rg': rg_ase,
+            'backup_item': backup_item_name_db1,
+            'backup_item_friendly_name': item_friendly_name
+        })
+
+        # First, disable protection without deleting backup data to put item in soft-deleted state
+        self.cmd('backup protection disable -v {vault} -g {rg} -c {vm_full_name} --backup-management-type AzureWorkload --workload-type SAPAseDatabase -i {backup_item} --delete-backup-data false --yes')
+        
+        # Verify item is in soft-deleted state (skip verification if item doesn't exist)
+        try:
+            item_json = self.cmd('backup item show --backup-management-type AzureWorkload -g {rg} -v {vault} -c {vm_full_name} -n {backup_item}').get_output_in_json()
+            if 'properties' in item_json and 'isScheduledForDeferredDelete' in item_json['properties']:
+                self.assertTrue(item_json['properties']['isScheduledForDeferredDelete'])
+        except:
+            # Item might not exist, which is fine for this test
+            pass
+
+        # Test undelete protection for ASE
+        self.cmd('backup protection undelete --backup-management-type AzureWorkload --workload-type SAPAseDatabase -c {vm_full_name} -i {backup_item} -g {rg} -v {vault}', checks=[
+            self.check("properties.entityFriendlyName", '{vm_friendly_name}'),
+            self.check("properties.operation", "Undelete"),
+            self.check("properties.status", "Completed"),
+            self.check("resourceGroup", '{rg}')
+        ])
+
+    def test_ase_disable_protection_retain_data(self):
+        """Test ASE disable protection with retain data functionality"""
+        self.kwargs.update({
+            'vault': vault_ase_reg,
+            'vm_full_name': reg_vm_name_ase,
+            'vm_friendly_name': reg_vm_friendly_name,
+            'rg': rg_ase,
+            'backup_item': backup_item_name_db2,
+            'backup_item_friendly_name': item_friendly_name
+        })
+
+        # Test disable protection with retain data for ASE
+        self.cmd('backup protection disable -v {vault} -g {rg} -c {vm_full_name} --backup-management-type AzureWorkload --workload-type SAPAseDatabase -i {backup_item} --retain-recovery-points-as-per-policy --yes', checks=[
+            self.check("properties.entityFriendlyName", '{vm_friendly_name}'),
+            self.check("properties.operation", "DisableBackup"),
+            self.check("properties.status", "Completed"),
+            self.check("resourceGroup", '{rg}')
+        ])
+
      

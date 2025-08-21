@@ -647,3 +647,43 @@ class BackupTests(ScenarioTest, unittest.TestCase):
         self.cmd('backup protection disable -g {rg} -v {vault} -c {container} -i {item2} --backup-management-type AzureStorage --delete-backup-data true --yes').get_output_in_json()
         # self.cmd('backup container unregister -g {rg} -v {vault} -c {container} --yes --backup-management-type AzureStorage')
         # time.sleep(100)
+    @AllowLargeResponse()
+    @RGPreparer(location="eastus2euap", random_name_length=20)
+    @VaultPreparer(soft_delete=True)
+    @StorageAccountPreparer(location="eastus2euap")
+    @FileSharePreparer()
+    @AFSPolicyPreparer()
+    @AFSItemPreparer()
+    def test_afs_undelete_protection(self, resource_group, vault_name, storage_account, afs_name, policy_name, item_name):
+        """Test AFS undelete protection functionality"""
+        self.kwargs.update({
+            'vault': vault_name,
+            'item': afs_name,
+            'container': storage_account,
+            'rg': resource_group,
+            'type': "AzureStorage",
+            'policy': policy_name
+        })
+
+        # Disable protection with delete backup data to simulate soft-delete scenario
+        self.cmd('backup protection disable -g {rg} -v {vault} -c {container} -i {item} --backup-management-type AzureStorage --delete-backup-data false --yes')
+        
+        # Verify item is in soft-deleted state
+        item_json = self.cmd('backup item show -g {rg} -v {vault} -c {container} -n {item} --backup-management-type AzureStorage').get_output_in_json()
+        self.assertEqual(item_json['properties']['protectionState'], 'ProtectionStopped')
+        self.assertTrue(item_json['properties']['isScheduledForDeferredDelete'])
+
+        # Test undelete protection
+        result = self.cmd('backup protection undelete -g {rg} -v {vault} -c {container} -i {item} --backup-management-type AzureStorage', checks=[
+            self.check("properties.entityFriendlyName", '{item}'),
+            self.check("properties.operation", "Undelete"),
+            self.check("properties.status", "Completed"),
+            self.check("resourceGroup", '{rg}')
+        ])
+
+        # Verify item is no longer soft-deleted
+        item_json = self.cmd('backup item show -g {rg} -v {vault} -c {container} -n {item} --backup-management-type AzureStorage').get_output_in_json()
+        self.assertFalse(item_json['properties']['isScheduledForDeferredDelete'])
+
+        # Clean up
+        self.cmd('backup protection disable -g {rg} -v {vault} -c {container} -i {item} --backup-management-type AzureStorage --delete-backup-data true --yes')
