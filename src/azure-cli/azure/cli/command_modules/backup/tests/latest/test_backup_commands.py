@@ -8,12 +8,10 @@ from datetime import datetime, timedelta
 import unittest
 import time
 import random
-from unittest.mock import Mock, patch, MagicMock
 
 from azure.cli.testsdk import ScenarioTest, JMESPathCheckExists, ResourceGroupPreparer, \
     StorageAccountPreparer, KeyVaultPreparer, record_only, live_only
-from azure.mgmt.recoveryservicesbackup.activestamp.models import StorageType, ProtectionState, \
-    ProtectedItemResource, AzureIaaSComputeVMProtectedItem, AzureFileShareProtectedItem, AzureVmWorkloadProtectedItem
+from azure.mgmt.recoveryservicesbackup.activestamp.models import StorageType
 from azure.cli.testsdk.scenario_tests import AllowLargeResponse
 
 from .preparers import VaultPreparer, VMPreparer, ItemPreparer, PolicyPreparer, RPPreparer, \
