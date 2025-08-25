@@ -525,10 +525,10 @@ def disable_protection(cmd, client, resource_group_name, vault_name, item,
     item_uri = cust_help.get_protected_item_uri_from_id(item.id)
 
     backup_item_type = item_uri.split(';')[0]
-    if not cust_help.is_sql(backup_item_type) and not cust_help.is_hana(backup_item_type):
+    if not cust_help.is_sql(backup_item_type) and not cust_help.is_hana(backup_item_type) and not cust_help.is_sapase(backup_item_type):
         raise CLIError(
             """
-            Item must be either of type SQLDataBase or SAPHanaDatabase.
+            Item must be either of type SQLDataBase, SAPHanaDatabase, or SAPAseDatabase.
             """)
 
     properties = _get_protected_item_instance(backup_item_type)
@@ -562,10 +562,10 @@ def undelete_protection(cmd, client, resource_group_name, vault_name, item):
     item_uri = cust_help.get_protected_item_uri_from_id(item.id)
 
     backup_item_type = item_uri.split(';')[0]
-    if not cust_help.is_sql(backup_item_type) and not cust_help.is_hana(backup_item_type):
+    if not cust_help.is_sql(backup_item_type) and not cust_help.is_hana(backup_item_type) and not cust_help.is_sapase(backup_item_type):
         raise ValidationError(
             """
-            Item must be either of type SQLDataBase or SAPHanaDatabase.
+            Item must be either of type SQLDataBase, SAPHanaDatabase, or SAPAseDatabase.
             """)
 
     properties = _get_protected_item_instance(backup_item_type)
