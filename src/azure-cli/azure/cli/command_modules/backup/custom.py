@@ -20,7 +20,7 @@ from azure.mgmt.recoveryservices.models import Vault, VaultProperties, Sku, SkuN
     CmkKeyVaultProperties, CmkKekIdentity, VaultPropertiesEncryption, UserIdentity, MonitoringSettings, \
     AzureMonitorAlertSettings, ClassicAlertSettings, SecuritySettings, ImmutabilitySettings, RestoreSettings, \
     CrossSubscriptionRestoreSettings, DeletedVaultUndeleteInputProperties, DeletedVaultUndeleteInput, \
-    SoftDeleteSettings, CostManagementSettings, ImmutabilityConfiguration
+    SoftDeleteSettings, CostManagementSettings, ImmutabilityConfiguration, SourceScanConfiguration
 from azure.mgmt.recoveryservicesbackup.activestamp.models import ProtectedItemResource, \
     AzureIaaSComputeVMProtectedItem, AzureIaaSClassicComputeVMProtectedItem, ProtectionState, IaasVMBackupRequest, \
     BackupRequestResource, IaasVMRestoreRequest, RestoreRequestResource, BackupManagementType, WorkloadType, \
@@ -156,7 +156,8 @@ standard_policy_type = "v1"
 def update_vault(cmd, client, vault_name, resource_group_name, tags=None,
                  public_network_access=None, immutability_state=None, cross_subscription_restore_state=None,
                  classic_alerts=None, azure_monitor_alerts_for_job_failures=None, tenant_id=None,
-                 backup_storage_redundancy=None, cross_region_restore_flag=None, cost_management_granularity=None):
+                 backup_storage_redundancy=None, cross_region_restore_flag=None, cost_management_granularity=None,
+                 source_scan_state=None):
     try:
         existing_vault = client.get(resource_group_name, vault_name)
     except CoreResourceNotFoundError:
@@ -169,8 +170,9 @@ def update_vault(cmd, client, vault_name, resource_group_name, tags=None,
     if public_network_access is not None:
         patchvault.properties.public_network_access = _get_vault_public_network_access(public_network_access)
 
-    if immutability_state is not None:
-        patchvault.properties.security_settings = _get_vault_security_settings(immutability_state, existing_vault)
+    if immutability_state is not None or source_scan_state is not None:
+        patchvault.properties.security_settings = _get_vault_security_settings(
+            immutability_state, existing_vault, source_scan_state)
 
     if cross_subscription_restore_state is not None:
         patchvault.properties.restore_settings = _get_vault_restore_settings(cross_subscription_restore_state)
@@ -304,7 +306,7 @@ def _get_vault_redunancy_settings(backup_storage_redundancy, cross_region_restor
 
 # TODO Remove pylint supress once the new SDK is in place
 # pylint: disable=unused-argument
-def _get_vault_security_settings(immutability_state, existing_vault=None):
+def _get_vault_security_settings(immutability_state, existing_vault=None, source_scan_state=None):
     security_settings = SecuritySettings()
     if existing_vault is not None:
         security_settings = existing_vault.properties.security_settings
@@ -331,6 +333,9 @@ def _get_vault_security_settings(immutability_state, existing_vault=None):
         else:
             # For Disabled state, only set the state without configuration
             security_settings.immutability_settings = ImmutabilitySettings(state=immutability_state)
+
+    if source_scan_state is not None:
+        security_settings.source_scan_configuration = SourceScanConfiguration(state=source_scan_state)
 
     return security_settings
 

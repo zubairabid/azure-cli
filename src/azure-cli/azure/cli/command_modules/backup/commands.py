@@ -95,9 +95,10 @@ def load_command_table(self, _):
         g.custom_command('reconfigure', 'reconfigure_backup_protection', client_factory=backup_protected_items_cf)
 
     with self.command_group('backup item', backup_custom_base, client_factory=protected_items_cf, exception_handler=backup_exception_handler) as g:
-        g.show_command('show', 'show_item', client_factory=backup_protected_items_cf, table_transformer=transform_item)
-        g.command('list', 'list_items', table_transformer=transform_item_list, client_factory=backup_protected_items_cf)
+        g.show_command('show', 'show_item_with_source_scan', client_factory=backup_protected_items_cf, table_transformer=transform_item)
+        g.command('list', 'list_items_with_source_scan', table_transformer=transform_item_list, client_factory=backup_protected_items_cf)
         g.command('set-policy', 'update_policy_for_item', table_transformer=transform_job)
+        g.command('source-scan-configuration set', 'set_item_source_scan_configuration', client_factory=backup_protected_items_cf)
 
     with self.command_group('backup protectable-item', backup_custom_base, client_factory=backup_protectable_items_cf, exception_handler=backup_exception_handler) as g:
         g.show_command('show', 'show_protectable_item')
@@ -111,8 +112,8 @@ def load_command_table(self, _):
         g.command('wait', 'wait_for_job')
 
     with self.command_group('backup recoverypoint', backup_custom_base, client_factory=recovery_points_cf, exception_handler=backup_exception_handler) as g:
-        g.show_command('show', 'show_recovery_point')
-        g.command('list', 'list_recovery_points', table_transformer=transform_recovery_point_list)
+        g.show_command('show', 'show_recovery_point_with_threat_info')
+        g.command('list', 'list_recovery_points_with_threat_info', table_transformer=transform_recovery_point_list)
         g.command('move', 'move_recovery_points')
         g.show_command('show-log-chain', 'show_log_chain_recovery_points', table_transformer=transform_log_chain_list)
 

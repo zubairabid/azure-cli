@@ -227,6 +227,28 @@ class BackupTests(ScenarioTest, unittest.TestCase):
             self.check("length([?name == '{vault3}'])", 1)
         ])
 
+    @ResourceGroupPreparer(name_prefix="AzureBackupRG_clitest_", location="eastus2euap")
+    @VaultPreparer()
+    def test_backup_vault_source_scan_configuration(self, resource_group, vault_name):
+        self.kwargs.update({
+            'rg': resource_group,
+            'vault': vault_name
+        })
+
+        self.cmd('backup vault update -g {rg} -n {vault} --source-scan-state Enabled', checks=[
+            self.check('properties.securitySettings.sourceScanConfiguration.state', 'Enabled')
+        ])
+        self.cmd('backup vault show -g {rg} -n {vault}', checks=[
+            self.check('properties.securitySettings.sourceScanConfiguration.state', 'Enabled')
+        ])
+
+        self.cmd('backup vault update -g {rg} -n {vault} --source-scan-state Disabled', checks=[
+            self.check('properties.securitySettings.sourceScanConfiguration.state', 'Disabled')
+        ])
+        self.cmd('backup vault show -g {rg} -n {vault}', checks=[
+            self.check('properties.securitySettings.sourceScanConfiguration.state', 'Disabled')
+        ])
+
     @ResourceGroupPreparer(name_prefix="AzureBackupRG_clitest_", location="centraluseuap")
     @VaultPreparer()
     @VMPreparer(parameter_name='vm1')
@@ -467,6 +489,33 @@ class BackupTests(ScenarioTest, unittest.TestCase):
 
         item1_json = self.cmd('backup item show --backup-management-type AzureIaasVM --workload-type VM -g {rg} -v {vault} -c {container1} -n {vm1}').get_output_in_json()
         self.assertIn(policy_name.lower(), item1_json['properties']['policyId'].lower())
+
+    @ResourceGroupPreparer(name_prefix="AzureBackupRG_clitest_", location="eastus2euap")
+    @VaultPreparer()
+    @VMPreparer()
+    @ItemPreparer()
+    def test_backup_item_source_scan_configuration(self, resource_group, vault_name, vm_name):
+        self.kwargs.update({
+            'rg': resource_group,
+            'vault': vault_name,
+            'vm': vm_name
+        })
+
+        self.cmd('backup vault update -g {rg} -n {vault} --source-scan-state Enabled')
+        self.kwargs['container'] = self.cmd(
+            'backup container show --backup-management-type AzureIaasVM -g {rg} -v {vault} '
+            '-n {vm} --query name').get_output_in_json()
+        self.kwargs['item'] = self.cmd(
+            'backup item show --backup-management-type AzureIaasVM --workload-type VM -g {rg} -v {vault} '
+            '-c {container} -n {vm} --query name').get_output_in_json()
+
+        result = self.cmd(
+            'backup item source-scan-configuration set -g {rg} -v {vault} -c {container} -n {item} '
+            '--state Enabled --backup-management-type AzureIaasVM --workload-type VM').get_output_in_json()
+        self.assertIn(result['status'], ('Accepted', 'Succeeded'))
+        if result['status'] == 'Accepted':
+            self.assertTrue(result['azureAsyncOperation'])
+            self.assertTrue(result['location'])
 
     @ResourceGroupPreparer(name_prefix="AzureBackupRG_clitest_", location="eastus2euap")
     @VaultPreparer()

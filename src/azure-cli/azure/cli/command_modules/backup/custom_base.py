@@ -3,6 +3,9 @@
 # Licensed under the MIT License. See License.txt in the project root for license information.
 # --------------------------------------------------------------------------------------------
 
+import json
+from urllib.parse import quote
+
 from azure.cli.command_modules.backup import custom
 from azure.cli.command_modules.backup import custom_afs
 from azure.cli.command_modules.backup import custom_help
@@ -15,6 +18,7 @@ from azure.cli.core.azclierror import ValidationError, RequiredArgumentMissingEr
     MutuallyExclusiveArgumentError, ArgumentUsageError
 from azure.mgmt.recoveryservicesbackup.activestamp import RecoveryServicesBackupClient
 from azure.cli.core.commands.client_factory import get_mgmt_service_client, get_subscription_id
+from azure.cli.core.util import send_raw_request
 # pylint: disable=import-error
 
 fabric_name = "Azure"
@@ -106,10 +110,66 @@ def show_item(cmd, client, resource_group_name, vault_name, container_name, name
                             backup_management_type, workload_type, use_secondary_region)
 
 
+def show_item_with_source_scan(cmd, client, resource_group_name, vault_name, container_name, name,
+                               backup_management_type=None, workload_type=None, use_secondary_region=None):
+    item = show_item(cmd, client, resource_group_name, vault_name, container_name, name,
+                     backup_management_type, workload_type, use_secondary_region)
+    if use_secondary_region or item is None or isinstance(item, list):
+        return item
+    if item.properties.backup_management_type.lower() != "azureiaasvm":
+        return item
+    return _get_raw_backup_resource(cmd, item.id, resource_group_name)
+
+
+def set_item_source_scan_configuration(cmd, client, resource_group_name, vault_name, container_name, name,
+                                       state, backup_management_type, workload_type):
+    item = show_item(cmd, client, resource_group_name, vault_name, container_name, name,
+                     backup_management_type, workload_type)
+    custom_help.validate_item(item)
+    if isinstance(item, list):
+        raise ValidationError("Multiple items found. Please use native container and item names.")
+    if item.properties.backup_management_type.lower() != "azureiaasvm":
+        raise InvalidArgumentValueError("Source Scan configuration is supported only for Azure VM backup items.")
+
+    container_uri = custom_help.get_protection_container_uri_from_id(item.id)
+    item_uri = custom_help.get_protected_item_uri_from_id(item.id)
+    endpoint = cmd.cli_ctx.cloud.endpoints.resource_manager.rstrip('/')
+    subscription_id = get_subscription_id(cmd.cli_ctx)
+    request_url = (
+        f"{endpoint}/subscriptions/{quote(subscription_id, safe='')}/resourceGroups/"
+        f"{quote(resource_group_name, safe='')}/providers/Microsoft.RecoveryServices/vaults/"
+        f"{quote(vault_name, safe='')}/backupFabrics/{fabric_name}/protectionContainers/"
+        f"{quote(container_uri, safe='')}/protectedItems/{quote(item_uri, safe='')}/configureSourceScan"
+        "?api-version=2026-07-01"
+    )
+    action = "Enable" if state == "Enabled" else "Disable"
+    response = send_raw_request(cmd.cli_ctx, "POST", request_url,
+                                body=json.dumps({"sourceScanAction": action}))
+
+    if response.text:
+        return response.json()
+
+    return {
+        "status": "Accepted",
+        "azureAsyncOperation": response.headers.get("Azure-AsyncOperation"),
+        "location": response.headers.get("Location"),
+        "retryAfter": response.headers.get("Retry-After")
+    }
+
+
 def list_items(cmd, client, resource_group_name, vault_name, workload_type=None, container_name=None,
                backup_management_type=None, use_secondary_region=None):
     return common.list_items(cmd, client, resource_group_name, vault_name, workload_type,
                              container_name, backup_management_type, use_secondary_region)
+
+
+def list_items_with_source_scan(cmd, client, resource_group_name, vault_name, workload_type=None,
+                                container_name=None, backup_management_type=None, use_secondary_region=None):
+    items = list_items(cmd, client, resource_group_name, vault_name, workload_type, container_name,
+                       backup_management_type, use_secondary_region)
+    if use_secondary_region or not backup_management_type or backup_management_type.lower() != "azureiaasvm":
+        return items
+    return [_get_raw_backup_resource(cmd, item.id, resource_group_name) for item in items]
 
 
 def show_recovery_point(cmd, client, resource_group_name, vault_name, container_name, item_name, name,
@@ -117,6 +177,16 @@ def show_recovery_point(cmd, client, resource_group_name, vault_name, container_
 
     return common.show_recovery_point(cmd, client, resource_group_name, vault_name, container_name,
                                       item_name, name, workload_type, backup_management_type, use_secondary_region)
+
+
+def show_recovery_point_with_threat_info(cmd, client, resource_group_name, vault_name, container_name, item_name,
+                                         name, workload_type=None, backup_management_type=None,
+                                         use_secondary_region=None):
+    recovery_point = show_recovery_point(cmd, client, resource_group_name, vault_name, container_name, item_name,
+                                         name, workload_type, backup_management_type, use_secondary_region)
+    if use_secondary_region or not backup_management_type or backup_management_type.lower() != "azureiaasvm":
+        return recovery_point
+    return _get_raw_backup_resource(cmd, recovery_point.id, resource_group_name)
 
 
 def list_recovery_points(cmd, client, resource_group_name, vault_name, container_name, item_name,
@@ -153,6 +223,30 @@ def list_recovery_points(cmd, client, resource_group_name, vault_name, container
                                                  tier=tier, recommended_for_archive=recommended_for_archive)
 
     return None
+
+
+def list_recovery_points_with_threat_info(cmd, client, resource_group_name, vault_name, container_name, item_name,
+                                          backup_management_type=None, workload_type=None, start_date=None,
+                                          end_date=None, use_secondary_region=None, is_ready_for_move=None,
+                                          target_tier=None, tier=None, recommended_for_archive=None):
+    recovery_points = list_recovery_points(
+        cmd, client, resource_group_name, vault_name, container_name, item_name, backup_management_type,
+        workload_type, start_date, end_date, use_secondary_region, is_ready_for_move, target_tier, tier,
+        recommended_for_archive)
+    if use_secondary_region or not backup_management_type or backup_management_type.lower() != "azureiaasvm":
+        return recovery_points
+    return [_get_raw_backup_resource(cmd, recovery_point.id, resource_group_name)
+            for recovery_point in recovery_points]
+
+
+def _get_raw_backup_resource(cmd, resource_id, resource_group_name):
+    endpoint = cmd.cli_ctx.cloud.endpoints.resource_manager.rstrip('/')
+    separator = '&' if '?' in resource_id else '?'
+    response = send_raw_request(
+        cmd.cli_ctx, "GET", f"{endpoint}{resource_id}{separator}api-version=2026-07-01")
+    resource = response.json()
+    resource.setdefault('resourceGroup', resource_group_name)
+    return resource
 
 
 def show_log_chain_recovery_points(cmd, client, resource_group_name, vault_name, container_name, item_name,
