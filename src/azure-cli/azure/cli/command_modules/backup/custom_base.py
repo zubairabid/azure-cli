@@ -15,7 +15,7 @@ from azure.cli.command_modules.backup._validators import validate_reconfigure_cl
 from azure.cli.command_modules.backup._client_factory import protection_policies_cf, backup_protected_items_cf, \
     backup_protection_containers_cf, backup_protectable_items_cf, registered_identities_cf, vaults_cf
 from azure.cli.core.azclierror import ValidationError, RequiredArgumentMissingError, InvalidArgumentValueError, \
-    MutuallyExclusiveArgumentError, ArgumentUsageError
+    MutuallyExclusiveArgumentError, ArgumentUsageError, HTTPError
 from azure.mgmt.recoveryservicesbackup.activestamp import RecoveryServicesBackupClient
 from azure.cli.core.commands.client_factory import get_mgmt_service_client, get_subscription_id
 from azure.cli.core.util import send_raw_request
@@ -143,8 +143,16 @@ def set_item_source_scan_configuration(cmd, client, resource_group_name, vault_n
         "?api-version=2026-07-01"
     )
     action = "Enable" if state == "Enabled" else "Disable"
-    response = send_raw_request(cmd.cli_ctx, "POST", request_url,
-                                body=json.dumps({"sourceScanAction": action}))
+    try:
+        response = send_raw_request(cmd.cli_ctx, "POST", request_url,
+                                    body=json.dumps({"sourceScanAction": action}))
+    except HTTPError as ex:
+        # Idempotent behaviour: if the source scan is already in the requested state, treat the
+        # operation as a successful no-op instead of surfacing an error to the caller.
+        response_text = getattr(getattr(ex, 'response', None), 'text', '') or str(ex)
+        if 'SourceScanStatusAlreadyInRequestedState' in response_text:
+            return {"status": "Succeeded"}
+        raise
 
     if response.text:
         return response.json()
@@ -246,7 +254,25 @@ def _get_raw_backup_resource(cmd, resource_id, resource_group_name):
         cmd.cli_ctx, "GET", f"{endpoint}{resource_id}{separator}api-version=2026-07-01")
     resource = response.json()
     resource.setdefault('resourceGroup', resource_group_name)
+    _set_raw_container_subscription_id(resource)
     return resource
+
+
+def _set_raw_container_subscription_id(resource):
+    # Mirror custom_help.set_container_subscription_id for the raw (dict) Azure VM backup item
+    # resource returned by the source-scan/threat-info code paths. The raw ARM response does not
+    # include the CLI-synthesized 'containerSubscriptionId', so surface it here (parsed from the
+    # item's sourceResourceId) to keep 'backup item show/list' output consistent with the
+    # non-source-scan path. Recovery point resources have no sourceResourceId and are left as-is.
+    if not isinstance(resource, dict):
+        return
+    properties = resource.get('properties')
+    if not isinstance(properties, dict):
+        return
+    backup_management_type = properties.get('backupManagementType')
+    source_resource_id = properties.get('sourceResourceId')
+    if backup_management_type and backup_management_type.lower() == 'azureiaasvm' and source_resource_id:
+        properties['containerSubscriptionId'] = custom_help.get_subscription_from_id(source_resource_id)
 
 
 def show_log_chain_recovery_points(cmd, client, resource_group_name, vault_name, container_name, item_name,
